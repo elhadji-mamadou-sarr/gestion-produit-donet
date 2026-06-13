@@ -1,0 +1,15 @@
+# build outputs
+bin/
+obj/
+
+# IDE/editor files
+.vs/
+.vscode/
+*.user
+*.suo
+
+# logs
+logs/
+
+# secrets / config locales (souvent contient des connexions DB / clés)
+appsettings.Development.json
