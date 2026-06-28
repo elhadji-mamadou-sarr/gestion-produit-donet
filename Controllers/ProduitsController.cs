@@ -1,5 +1,5 @@
 // Controllers/ProduitsController.cs
-using GestionProduits.Api.Data;
+using GestionProduits.Api.Infrastructure;
 using GestionProduits.Api.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

@@ -11,5 +11,10 @@ obj/
 # logs
 logs/
 
+.env
+docker-compose.override.yml
+
 # secrets / config locales (souvent contient des connexions DB / clés)
 appsettings.Development.json
+
+docs.md
