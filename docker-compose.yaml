@@ -1,0 +1,57 @@
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: gestionproduits_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-gestionproduits}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-gestionproduits}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── API ASP.NET Core ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gestionproduits_api
+    restart: unless-stopped
+    ports:
+      - "5167:8080"
+    environment:
+      # Base de données — pointe vers le service "db" du compose
+      ConnectionStrings__DefaultConnection: >-
+        Host=db;
+        Database=${DB_NAME:-gestionproduits};
+        Username=${DB_USER:-postgres};
+        Password=${DB_PASSWORD:-postgres}
+
+      # JWT
+      Jwt__Key: ${JWT_KEY:-DevSecretKey_MinimumTrenteDeux_Caracteres!!}
+      Jwt__Issuer: ${JWT_ISSUER:-GestionProduits.Api}
+      Jwt__Audience: ${JWT_AUDIENCE:-GestionProduits.App}
+
+      # ASP.NET Core
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+
+    volumes:
+      # Logs persistés sur l'hôte pour faciliter le debug
+      - ./logs:/app/logs
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
