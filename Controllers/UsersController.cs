@@ -6,6 +6,7 @@ using GestionProduits.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Prometheus;
 
 namespace GestionProduits.Api.Controllers
 {
@@ -17,6 +18,11 @@ namespace GestionProduits.Api.Controllers
         private readonly AppDbContext _db;
         private readonly ILogger<UsersController> _log;
 
+
+        private static readonly Counter _userCreatedCounter = Metrics
+            .CreateCounter("users_created_total", "Nombre total d'utilisateurs créés");
+
+    
         public UsersController(AppDbContext db, ILogger<UsersController> log)
         {
             _db  = db;
@@ -116,31 +122,34 @@ namespace GestionProduits.Api.Controllers
             return user is null ? NotFound() : Ok(ToDto(user));
         }
 
-        // POST api/users
-        [HttpPost]
-        [Authorize(Roles = "User,Admin")]
-        public async Task<ActionResult<UserDto>> Create(CreateUserDto dto)
-        {
-            if (await _db.Users.AnyAsync(u => u.Email == dto.Email.ToLowerInvariant()))
-                return Conflict(new { message = "Email déjà utilisé" });
+       // POST api/users
+[HttpPost]
+[Authorize(Roles = "Admin")]  // ← seulement cette ligne change
+public async Task<ActionResult<UserDto>> Create(CreateUserDto dto)
+{
+    if (await _db.Users.AnyAsync(u => u.Email == dto.Email.ToLowerInvariant()))
+        return Conflict(new { message = "Email déjà utilisé" });
 
-            var user = new User
-            {
-                FirstName    = dto.FirstName,
-                LastName     = dto.LastName,
-                Email        = dto.Email.ToLowerInvariant(),
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-                Role         = dto.Role,
-                Phone        = dto.Phone,
-                Department   = dto.Department
-            };
+    var user = new User
+    {
+        FirstName    = dto.FirstName,
+        LastName     = dto.LastName,
+        Email        = dto.Email.ToLowerInvariant(),
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+        Role         = dto.Role,
+        Phone        = dto.Phone,
+        Department   = dto.Department
+    };
 
-            _db.Users.Add(user);
-            await _db.SaveChangesAsync();
-            _log.LogInformation("Utilisateur créé par Admin : {Email}", user.Email);
+    _db.Users.Add(user);
+    await _db.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetById), new { id = user.Id }, ToDto(user));
-        }
+    _userCreatedCounter.Inc();
+
+    _log.LogInformation("Utilisateur créé par Admin : {Email}", user.Email);
+
+    return CreatedAtAction(nameof(GetById), new { id = user.Id }, ToDto(user));
+}
 
         // PUT api/users/{id}
         [HttpPut("{id:guid}")]

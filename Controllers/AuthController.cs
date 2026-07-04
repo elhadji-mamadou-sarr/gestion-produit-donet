@@ -5,6 +5,7 @@ using GestionProduits.Api.Models;
 using GestionProduits.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Prometheus;                          // ← ajoute
 
 namespace GestionProduits.Api.Controllers
 {
@@ -15,6 +16,13 @@ namespace GestionProduits.Api.Controllers
         private readonly AppDbContext _db;
         private readonly ITokenService _tokenSvc;
         private readonly ILogger<AuthController> _log;
+
+        // ← ajoute ces 2 compteurs
+        private static readonly Counter _loginCounter = Metrics
+            .CreateCounter("auth_login_total", "Nombre de connexions", "status");
+
+        private static readonly Counter _registerCounter = Metrics
+            .CreateCounter("auth_register_total", "Nombre d'inscriptions");
 
         public AuthController(
             AppDbContext db,
@@ -44,6 +52,7 @@ namespace GestionProduits.Api.Controllers
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
 
+            _registerCounter.Inc();                                    // ← ajoute
             _log.LogInformation("Nouvel utilisateur inscrit : {Email}", user.Email);
             return Ok(await BuildAuthResponse(user));
         }
@@ -57,6 +66,7 @@ namespace GestionProduits.Api.Controllers
 
             if (user is null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             {
+                _loginCounter.WithLabels("failed").Inc();              // ← ajoute
                 _log.LogWarning("Tentative échouée : {Email}", dto.Email);
                 return Unauthorized(new { message = "Email ou mot de passe incorrect" });
             }
@@ -64,6 +74,7 @@ namespace GestionProduits.Api.Controllers
             if (!user.IsActive)
                 return Forbid();
 
+            _loginCounter.WithLabels("success").Inc();                 // ← ajoute
             _log.LogInformation("Connexion réussie : {Email}", user.Email);
             return Ok(await BuildAuthResponse(user));
         }
@@ -102,7 +113,7 @@ namespace GestionProduits.Api.Controllers
         // ── Méthode privée ────────────────────────────────────────────────
         private async Task<AuthResponseDto> BuildAuthResponse(User user)
         {
-            var refresh = _tokenSvc.GenerateRefreshToken();
+            var refresh             = _tokenSvc.GenerateRefreshToken();
             user.RefreshToken       = refresh;
             user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(7);
             await _db.SaveChangesAsync();

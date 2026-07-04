@@ -8,7 +8,7 @@ using System.Text;
 
 namespace GestionProduits.Api.Services
 {
-    public class TokenService : ITokenService  // ← ajout de : ITokenService
+    public class TokenService : ITokenService
     {
         private readonly IConfiguration _config;
 

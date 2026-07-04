@@ -3,6 +3,7 @@ using GestionProduits.Api.Data;
 using GestionProduits.Api.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Prometheus;  // ← ajout
 
 namespace GestionProduits.Api.Controllers;
 
@@ -12,6 +13,13 @@ public class ProduitsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly ILogger<ProduitsController> _logger;
+
+    // ← ajout métriques
+    private static readonly Counter _productCreatedCounter = Metrics
+        .CreateCounter("products_created_total", "Nombre total de produits créés");
+
+    private static readonly Counter _productDeletedCounter = Metrics
+        .CreateCounter("products_deleted_total", "Nombre total de produits supprimés");
 
     public ProduitsController(AppDbContext context, ILogger<ProduitsController> logger)
     {
@@ -39,6 +47,7 @@ public class ProduitsController : ControllerBase
     {
         _context.Produits.Add(produit);
         await _context.SaveChangesAsync();
+        _productCreatedCounter.Inc();  // ← ajout
         _logger.LogInformation("Produit créé : {Nom}", produit.Nom);
         return CreatedAtAction(nameof(GetById), new { id = produit.Id }, produit);
     }
@@ -46,8 +55,14 @@ public class ProduitsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, Produit produit)
     {
-        if (id != produit.Id) return BadRequest();
-        _context.Entry(produit).State = EntityState.Modified;
+        var existingProduit = await _context.Produits.FindAsync(id);
+        if (existingProduit == null) return NotFound();
+
+        existingProduit.Nom = produit.Nom;
+        existingProduit.Description = produit.Description;
+        existingProduit.Prix = produit.Prix;
+        existingProduit.Quantite = produit.Quantite;
+
         await _context.SaveChangesAsync();
         return NoContent();
     }
@@ -59,6 +74,7 @@ public class ProduitsController : ControllerBase
         if (produit == null) return NotFound();
         _context.Produits.Remove(produit);
         await _context.SaveChangesAsync();
+        _productDeletedCounter.Inc();  // ← ajout
         _logger.LogInformation("Produit supprimé : {Id}", id);
         return NoContent();
     }
