@@ -1,8 +1,9 @@
-using System.Text;
+using System.Security.Claims;
 using GestionProduits.Api.Infrastructure;
-using GestionProduits.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Serilog;
@@ -31,26 +32,78 @@ try
         opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection est manquant.")));
 
-    var jwtSection = builder.Configuration.GetSection("Jwt");
+    // -- Keycloak JWT via JWKS ----------------------------------------------------
+    var keycloakSection = builder.Configuration.GetSection("Keycloak");
+    var realm = keycloakSection["Realm"]!;
+    // URL interne : sert à récupérer metadata + JWKS (doit être joignable par l'API,
+    // ex. http://keycloak:8080 en Docker).
+    var authServerUrl = keycloakSection["AuthServerUrl"]!;
+    var issuer = $"{authServerUrl}/realms/{realm}";
+    var metadataAddress = $"{issuer}/.well-known/openid-configuration";
+    var allowHttpMetadata = builder.Environment.IsDevelopment();
+
+    // Issuer externe : celui qui figure dans le claim "iss" des tokens, tel que vu
+    // par le client qui les obtient (ex. http://localhost:8180). En Docker il diffère
+    // de l'URL interne, donc on valide contre les deux.
+    var publicAuthServerUrl = keycloakSection["ValidIssuer"];
+    var validIssuers = string.IsNullOrWhiteSpace(publicAuthServerUrl)
+        ? new[] { issuer }
+        : new[] { issuer, $"{publicAuthServerUrl}/realms/{realm}" }.Distinct().ToArray();
+
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(opt =>
         {
+            opt.RequireHttpsMetadata = !allowHttpMetadata;
+            opt.MetadataAddress = metadataAddress;
+            opt.Authority = allowHttpMetadata ? null : issuer;
+            opt.Audience = keycloakSection["ClientId"];
+
+            if (allowHttpMetadata)
+            {
+                opt.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+                    metadataAddress,
+                    new OpenIdConnectConfigurationRetriever(),
+                    new HttpDocumentRetriever { RequireHttps = false });
+            }
+
             opt.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
-                ValidateAudience = true,
+                ValidIssuers = validIssuers,
+                ValidateAudience = false,
                 ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ValidIssuer = jwtSection["Issuer"],
-                ValidAudience = jwtSection["Audience"],
-                IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(jwtSection["Key"]!)),
-                ClockSkew = TimeSpan.FromSeconds(30)
+                ClockSkew = TimeSpan.FromSeconds(30),
+                NameClaimType = "preferred_username",
+                RoleClaimType = ClaimTypes.Role
+            };
+
+            opt.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = ctx =>
+                {
+                    var identity = ctx.Principal?.Identity as ClaimsIdentity;
+                    if (identity is null) return Task.CompletedTask;
+
+                    var realmAccess = ctx.Principal?
+                        .FindFirst("realm_access")?.Value;
+                    if (realmAccess is not null)
+                    {
+                        var roles = System.Text.Json.JsonDocument
+                            .Parse(realmAccess)
+                            .RootElement
+                            .GetProperty("roles")
+                            .EnumerateArray()
+                            .Select(r => r.GetString()!);
+
+                        foreach (var role in roles)
+                            identity.AddClaim(new Claim(ClaimTypes.Role, role));
+                    }
+                    return Task.CompletedTask;
+                }
             };
         });
 
     builder.Services.AddAuthorization();
-    builder.Services.AddScoped<ITokenService, TokenService>();
     builder.Services.AddControllers();
 
     builder.Services.AddCors(o => o.AddPolicy("AllowAngular", p =>
@@ -85,7 +138,10 @@ try
 
     if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 
-    app.UseHttpsRedirection();
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHttpsRedirection();
+    }
     app.UseCors("AllowAngular");
     app.UseAuthentication();
     app.UseAuthorization();

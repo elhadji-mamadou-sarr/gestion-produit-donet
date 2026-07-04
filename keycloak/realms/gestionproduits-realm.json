@@ -1,0 +1,106 @@
+{
+  "realm": "gestionproduits",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "User",
+        "description": "Utilisateur standard",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "Admin",
+        "description": "Administrateur",
+        "composite": false,
+        "clientRole": false
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "gestionproduits-api",
+      "name": "gestionproduits-api",
+      "description": "API bearer-only — validation des tokens uniquement",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true
+    },
+    {
+      "clientId": "gestionproduits-angular",
+      "name": "gestionproduits-angular",
+      "enabled": true,
+      "publicClient": true,
+      "bearerOnly": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:4200/*", "http://localhost:5167/*"],
+      "webOrigins": ["http://localhost:4200", "http://localhost:5167"],
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@test.com",
+      "email": "admin@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Admin",
+      "lastName": "Test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["Admin"]
+    },
+    {
+      "username": "user@test.com",
+      "email": "user@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "User",
+      "lastName": "Test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "user123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["User"]
+    }
+  ]
+}

@@ -1,10 +1,5 @@
 namespace GestionProduits.Api.DTOs;
 
-public record RegisterDto(string FirstName, string LastName, string Email, string Password);
-public record LoginDto(string Email, string Password);
-public record AuthResponseDto(string AccessToken, string RefreshToken, UserDto User);
-public record RefreshTokenDto(string RefreshToken);
-
 public record UserDto(
     Guid Id, string FirstName, string LastName, string Email,
     string Role, bool IsActive, string? AvatarUrl, string? Phone,

@@ -36,10 +36,14 @@ services:
         Username=${DB_USER:-postgres};
         Password=${DB_PASSWORD:-postgres}
 
-      # JWT
-      Jwt__Key: ${JWT_KEY:-DevSecretKey_MinimumTrenteDeux_Caracteres!!}
-      Jwt__Issuer: ${JWT_ISSUER:-GestionProduits.Api}
-      Jwt__Audience: ${JWT_AUDIENCE:-GestionProduits.App}
+      # Keycloak
+      # AuthServerUrl = URL interne (réseau Docker) pour récupérer metadata + JWKS
+      Keycloak__AuthServerUrl: http://keycloak:8080
+      # ValidIssuer = URL externe présente dans le claim "iss" des tokens
+      # (celle par laquelle le client/navigateur obtient ses tokens)
+      Keycloak__ValidIssuer: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8180}
+      Keycloak__Realm: ${KEYCLOAK_REALM:-gestionproduits}
+      Keycloak__ClientId: ${KEYCLOAK_CLIENT_ID:-gestionproduits-api}
 
       # ASP.NET Core
       ASPNETCORE_ENVIRONMENT: Development
@@ -52,6 +56,54 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  # ── Keycloak DB ───────────────────────────────────────────────────────────
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: keycloak_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Keycloak ──────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: gestionproduits_keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+    ports:
+      - "8180:8080"
+    volumes:
+      - ./keycloak/realms:/opt/keycloak/data/import
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
 
 volumes:
   postgres_data:
+  keycloak_db_data:

@@ -3,11 +3,13 @@ using GestionProduits.Api.Infrastructure;
 using GestionProduits.Api.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace GestionProduits.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class ProduitsController : ControllerBase
 {
     private readonly AppDbContext _context;
