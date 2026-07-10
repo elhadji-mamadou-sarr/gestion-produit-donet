@@ -18,7 +18,6 @@ namespace GestionProduits.Api.Controllers
         private readonly AppDbContext _db;
         private readonly ILogger<UsersController> _log;
 
-
         private static readonly Counter _userCreatedCounter = Metrics
             .CreateCounter("users_created_total", "Nombre total d'utilisateurs créés");
 
